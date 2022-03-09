@@ -16,7 +16,6 @@ plugins{
 
 sourceSets.main{
     java.srcDirs = ['src/']
-    resources.srcDirs = ['assets/']
 }
 
 repositories{
@@ -37,23 +36,32 @@ ext{
 
 import arc.packer.*
 
-jar{
-    archiveFileName = 'Shade50.jar'
-    from configurations.runtimeClasspath.collect{ it.isDirectory() ? it : zipTree(it) }
+task pack{
+    doFirst{
+        TexturePacker.process("$rootDir/assets-raw/sprites/", "$rootDir/assets/sprites/", "sprites.aatls")
+    }
+}
 
+jar{
+    if(!file("$rootDir/assets/sprites/sprites.aatls").exists()) dependsOn pack
+
+    archiveFileName = 'Shade50.jar'
+    from files(sourceSets.main.output.classesDirs)
+    from files(sourceSets.main.output.resourcesDir)
+    from configurations.runtimeClasspath.collect{ it.isDirectory() ? it : zipTree(it) }
+    from files("$rootDir/assets")
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     manifest.attributes(
         'Main-Class': entryPoint
     )
 }
 
 task run(type: JavaExec, dependsOn: [classes, configurations.runtimeClasspath]){
-    mainClass.set entryPoint
-    classpath = sourceSets.main.runtimeClasspath
-    standardInput = System.in
-}
+    if(!file("$rootDir/assets/sprites/sprites.aatls").exists()) dependsOn pack
 
-task pack{
-    doFirst{
-        TexturePacker.process("$rootDir/assets-raw/sprites/", "$rootDir/assets/sprites/", "sprites.aatls")
-    }
+    mainClass.set entryPoint
+    workingDir "$rootDir/assets/"
+    classpath sourceSets.main.runtimeClasspath
+    standardInput System.in
 }
