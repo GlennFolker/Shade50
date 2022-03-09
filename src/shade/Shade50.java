@@ -13,7 +13,7 @@ public class Shade50 extends ApplicationCore{
 
     public static void main(String[] args){
         new SdlApplication(new Shade50(), new SdlConfig(){{
-            title = "Shade50";
+            title = "Shade-50";
             width = 800;
             height = 600;
             maximized = true;
@@ -49,5 +49,13 @@ public class Shade50 extends ApplicationCore{
         super.dispose();
         Core.batch.dispose();
         Core.atlas.dispose();
+    }
+
+    public static float parseFloat(String input){
+        try{
+            return Float.parseFloat(input);
+        }catch(Throwable t){
+            return 0f;
+        }
     }
 }
