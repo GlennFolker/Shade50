@@ -1,0 +1,59 @@
+buildscript{
+    repositories{
+        mavenCentral()
+        maven{ url 'https://www.jitpack.io/' }
+    }
+
+    dependencies{
+        classpath "com.github.Anuken.Arc:arc-core:$arcVersion"
+        classpath "com.github.Anuken.Arc:packer:$arcVersion"
+    }
+}
+
+plugins{
+    id 'java'
+}
+
+sourceSets.main{
+    java.srcDirs = ['src/']
+    resources.srcDirs = ['assets/']
+}
+
+repositories{
+    mavenCentral()
+    maven{ url 'https://www.jitpack.io/' }
+}
+
+dependencies{
+    implementation "com.github.Anuken.Arc:arc-core:$arcVersion"
+    implementation "com.github.Anuken.Arc:g3d:$arcVersion"
+    implementation "com.github.Anuken.Arc:backend-sdl:$arcVersion"
+    implementation "com.github.Anuken.Arc:natives-desktop:$arcVersion"
+}
+
+ext{
+    entryPoint = 'shade.Shade50'
+}
+
+import arc.packer.*
+
+jar{
+    archiveFileName = 'Shade50.jar'
+    from configurations.runtimeClasspath.collect{ it.isDirectory() ? it : zipTree(it) }
+
+    manifest.attributes(
+        'Main-Class': entryPoint
+    )
+}
+
+task run(type: JavaExec, dependsOn: [classes, configurations.runtimeClasspath]){
+    mainClass.set entryPoint
+    classpath = sourceSets.main.runtimeClasspath
+    standardInput = System.in
+}
+
+task pack{
+    doFirst{
+        TexturePacker.process("$rootDir/assets-raw/sprites/", "$rootDir/assets/sprites/", "sprites.aatls")
+    }
+}
