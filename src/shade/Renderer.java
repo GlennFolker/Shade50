@@ -2,7 +2,9 @@ package shade;
 
 import arc.*;
 import arc.graphics.*;
+import arc.graphics.g2d.*;
 import arc.graphics.g3d.*;
+import arc.graphics.gl.*;
 import arc.struct.*;
 import shade.comp.*;
 
@@ -26,5 +28,38 @@ public class Renderer implements ApplicationListener{
         camera.update();
 
         for(Container cont : containers) cont.act();
+        SFrameBuffer.resetAll();
+    }
+
+    public static class SFrameBuffer extends FrameBuffer{
+        private static final Seq<SFrameBuffer> buffers = new Seq<>();
+
+        public SFrameBuffer(int width, int height){
+            super(width, height);
+            buffers.add(this);
+        }
+
+        @Override
+        public void dispose(){
+            super.dispose();
+            buffers.remove(this);
+        }
+
+        public static void blitCurrent(Shader shader){
+            if(currentBoundFramebuffer instanceof SFrameBuffer buffer){
+                buffer.end();
+                buffer.blit(shader);
+            }
+        }
+
+        public static void resetAll(){
+            unbind();
+            currentBoundFramebuffer = null;
+            bufferNesting = 0;
+
+            Draw.flush();
+            Gl.viewport(0, 0, Core.graphics.getBackBufferWidth(), Core.graphics.getBackBufferHeight());
+            for(SFrameBuffer buffer : buffers) buffer.lastBoundFramebuffer = null;
+        }
     }
 }

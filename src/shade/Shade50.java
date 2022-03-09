@@ -1,7 +1,6 @@
 package shade;
 
 import arc.*;
-import arc.assets.*;
 import arc.backend.sdl.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
@@ -11,8 +10,6 @@ public class Shade50 extends ApplicationCore{
     public static Renderer renderer;
     public static UI ui;
     public static Input input;
-
-    private boolean loaded;
 
     public static void main(String[] args){
         new SdlApplication(new Shade50(), new SdlConfig(){{
@@ -29,8 +26,7 @@ public class Shade50 extends ApplicationCore{
 
     @Override
     public void setup(){
-        Core.assets = new AssetManager();
-        Core.atlas = TextureAtlas.blankAtlas();
+        Core.atlas = new TextureAtlas("sprites/sprites.aatls");
         Core.camera = new Camera();
         Core.batch = new SpriteBatch();
         Core.scene = new Scene();
@@ -46,27 +42,12 @@ public class Shade50 extends ApplicationCore{
         Core.scene.marginRight = insets[1];
         Core.scene.marginTop = insets[2];
         Core.scene.marginBottom = insets[3];
-
-        Core.assets.load("sprites/sprites.aatls", TextureAtlas.class).loaded = atlas -> {
-            Core.atlas.dispose();
-            Core.atlas = atlas;
-        };
-    }
-
-    @Override
-    public void update(){
-        if(!loaded && Core.assets.update()){
-            loaded = true;
-            Events.fire(Shade50.class, this);
-        }else{
-            super.update();
-        }
     }
 
     @Override
     public void dispose(){
         super.dispose();
         Core.batch.dispose();
-        Core.assets.dispose();
+        Core.atlas.dispose();
     }
 }

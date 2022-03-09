@@ -18,12 +18,17 @@ sourceSets.main{
     java.srcDirs = ['src/']
 }
 
+sourceCompatibility = 16
+targetCompatibility = 8
+
 repositories{
     mavenCentral()
     maven{ url 'https://www.jitpack.io/' }
 }
 
 dependencies{
+    annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
+
     implementation "com.github.Anuken.Arc:arc-core:$arcVersion"
     implementation "com.github.Anuken.Arc:g3d:$arcVersion"
     implementation "com.github.Anuken.Arc:backend-sdl:$arcVersion"
@@ -64,4 +69,8 @@ task run(type: JavaExec, dependsOn: [classes, configurations.runtimeClasspath]){
     workingDir "$rootDir/assets/"
     classpath sourceSets.main.runtimeClasspath
     standardInput System.in
+}
+
+compileJava{
+    options.compilerArgs += ['--release', '8']
 }
