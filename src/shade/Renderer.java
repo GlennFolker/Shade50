@@ -17,19 +17,48 @@ public class Renderer implements ApplicationListener{
     public Camera3D camera;
     public Seq<Container> containers = new Seq<>();
 
+    public Shader screenspace;
+
     @Override
     public void init(){
         camera = new Camera3D();
+
+        screenspace = new Shader("""
+            in vec2 a_position;
+            in vec2 a_texCoord0;
+            
+            out vec2 v_texCoords;
+            
+            void main(){
+                gl_Position = vec4(a_position, 0.0, 1.0);
+                v_texCoords = a_texCoord0;
+            }
+            """, """
+            in vec2 v_texCoords;
+            
+            uniform sampler2D u_texture;
+            
+            void main(){
+                gl_FragColor = texture2D(u_texture, v_texCoords);
+            }
+            """){
+            @Override
+            public void apply(){
+                setUniformi("u_texture", 0);
+            }
+        };
     }
 
     @Override
     public void update(){
-        Gl.depthMask(true);
-        Gl.depthRangef(camera.near, camera.far);
-        Gl.depthFunc(Gl.lequal);
+        Blending.disabled.apply();
 
         Gl.clearColor(0f, 0f, 0f, 0f);
         Gl.clear(Gl.colorBufferBit | Gl.depthBufferBit);
+
+        Gl.depthMask(true);
+        Gl.clear(Gl.depthBufferBit);
+        Gl.enable(Gl.depthTest);
 
         Core.camera.resize(Core.graphics.getWidth(), Core.graphics.getHeight());
         Core.camera.update();
@@ -38,13 +67,19 @@ public class Renderer implements ApplicationListener{
 
         for(Container cont : containers) cont.act();
         SFrameBuffer.resetAll();
+
+        Gl.disable(Gl.depthTest);
+    }
+
+    public static String copySource(String shaderSource){
+        return shaderSource.substring(shaderSource.indexOf("#endif") + "#endif".length()).trim();
     }
 
     public static class SFrameBuffer extends FrameBuffer{
         private static final Seq<SFrameBuffer> buffers = new Seq<>();
 
         public SFrameBuffer(int width, int height){
-            super(width, height);
+            super(width, height, true);
             buffers.add(this);
         }
 
@@ -121,10 +156,7 @@ public class Renderer implements ApplicationListener{
                     if(shader != null) shader.dispose();
                     shader = s;
                 }).growX().fillY().padTop(6f);
-                table.row().table(t -> {
-                    t.left().add("Primitive Type: ").fill().pad(4f);
-                    UI.defEnum(t, "Primitive Type", PrimitiveType.all, primitiveType, val -> primitiveType = val).growX().fillY().pad(4f).padLeft(0f).padRight(4f);
-                }).growX().fillY().padTop(6f);
+                table.row().table(t -> UI.defField(t, "Primitive Type", () -> UI.defEnum(t, "Primitive Type", PrimitiveType.all, primitiveType, val -> primitiveType = val))).growX().fillY().padTop(6f);
 
                 UI.defFooter(table.row(), this, null).growX().fillY().padTop(6f);
             }
@@ -132,15 +164,14 @@ public class Renderer implements ApplicationListener{
 
         public static class CBuffer extends Container{
             public SFrameBuffer buffer = new SFrameBuffer(Core.graphics.getWidth(), Core.graphics.getHeight());
-            public float scaleX = 1f;
-            public float scaleY = 1f;
+            public Vec2 scale = new Vec2(1f, 1f);
             public Color clear = new Color();
 
             @Override
             public void act(){
                 buffer.resize(
-                    Mathf.round(Core.graphics.getWidth() * scaleX),
-                    Mathf.round(Core.graphics.getHeight() * scaleY)
+                    Mathf.round(Core.graphics.getWidth() * scale.x),
+                    Mathf.round(Core.graphics.getHeight() * scale.y)
                 );
 
                 buffer.begin(clear);
@@ -153,12 +184,22 @@ public class Renderer implements ApplicationListener{
 
             @Override
             public void buildUI(Table table){
+                UI.defHeader(table, "FrameBuffer Capture").growX().fillY();
 
+                table.row().table(t -> {
+                    UI.defField(t, "Scale", () -> UI.defVec2(t, null, scale, null));
+                    UI.defField(t.row(), "Clear Color", () -> UI.defCol(t, null, clear, null));
+                }).growX().fillY().padTop(6f);
+
+                UI.defFooter(table.row(), this, null).growX().fillY().padTop(6f);
             }
         }
 
         public static class CBlit extends Container{
-            public Shader shader;
+            public Shader shader = new Shader(
+                copySource(renderer.screenspace.getVertexShaderSource()),
+                copySource(renderer.screenspace.getFragmentShaderSource())
+            );
 
             @Override
             public void act(){
@@ -172,7 +213,46 @@ public class Renderer implements ApplicationListener{
 
             @Override
             public void buildUI(Table table){
+                UI.defHeader(table, "FrameBuffer Blit").growX().fillY();
 
+                table.row().table(t -> UI.defField(t, "Shader", () -> UI.defShader(t, null, shader, s -> {
+                    if(shader != null) shader.dispose();
+                    shader = s;
+                }))).growX().fillY().padTop(6f);
+
+                UI.defFooter(table.row(), this, null).growX().fillY().padTop(6f);
+            }
+        }
+
+        public static class CBlend extends Container{
+            public BlendFunc src = BlendFunc.srcAlpha, dst = BlendFunc.oneMinusSrcAlpha;
+
+            public CBlend(){}
+
+            public CBlend(BlendFunc src, BlendFunc dst){
+                this.src = src;
+                this.dst = dst;
+            }
+
+            @Override
+            public void act(){
+                Gl.enable(Gl.blend);
+                Gl.blendFunc(src.func, dst.func);
+            }
+
+            @Override
+            public void dispose(){}
+
+            @Override
+            public void buildUI(Table table){
+                UI.defHeader(table, "Blending").growX().fillY();
+
+                table.row().table(t -> {
+                    UI.defField(t, "Source", () -> UI.defEnum(t, "Source Factor", BlendFunc.all, src, val -> src = val));
+                    UI.defField(t.row(), "Destination", () -> UI.defEnum(t, "Destination Factor", BlendFunc.all, dst, val -> dst = val));
+                }).growX().fillY().padTop(6f);
+
+                UI.defFooter(table.row(), this, null).growX().fillY().padTop(6f);
             }
         }
     }
@@ -262,6 +342,31 @@ public class Renderer implements ApplicationListener{
                 case Gl.shortV -> glShort;
                 default -> throw new IllegalArgumentException("Invalid GL type: " + type);
             };
+        }
+    }
+
+    public enum BlendFunc{
+        zero(Gl.zero, "GL_ZERO"),
+        one(Gl.one, "GL_ONE"),
+        dstColor(Gl.dstColor, "GL_DST_COLOR"),
+        oneMinusDstColor(Gl.oneMinusDstColor, "GL_ONE_MINUS_DST_COLOR"),
+        srcColor(Gl.srcColor, "GL_SRC_COLOR"),
+        oneMinusSrcColor(Gl.oneMinusSrcColor, "GL_ONE_MINUS_SRC_COLOR"),
+        srcAlpha(Gl.srcAlpha, "GL_SRC_ALPHA"),
+        oneMinusSrcAlpha(Gl.oneMinusSrcAlpha, "GL_ONE_MINUS_SRC_ALPHA");
+
+        public static final BlendFunc[] all = values();
+
+        public final int func;
+        public final String alias;
+
+        BlendFunc(int func, String alias){
+            this.func = func;
+            this.alias = alias;
+        }
+
+        public String toString(){
+            return alias;
         }
     }
 

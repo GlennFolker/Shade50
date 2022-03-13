@@ -1,17 +1,16 @@
 package shade;
 
 import arc.*;
+import arc.Files.*;
 import arc.backend.sdl.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
-import arc.math.geom.*;
 import arc.scene.*;
 import arc.struct.*;
 import arc.util.serialization.*;
+import arc.util.serialization.JsonWriter.*;
 
 public class Shade50 extends ApplicationCore{
-    public static final Quat quat = new Quat();
-
     public static Renderer renderer;
     public static UI ui;
     public static Input input;
@@ -23,9 +22,11 @@ public class Shade50 extends ApplicationCore{
             width = 800;
             height = 600;
             maximized = true;
-            gl30 = true;
             disableAudio = true;
-            depth = 8;
+            gl30 = true;
+            depth = 16;
+
+            setWindowIcon(FileType.internal, "icon.png");
         }});
     }
 
@@ -49,6 +50,8 @@ public class Shade50 extends ApplicationCore{
         Core.scene.marginBottom = insets[3];
 
         json = new StatedJson(){{
+            setOutputType(OutputType.javascript);
+
             setSerializer(FloatSeq.class, new Serializer<>(){
                 @Override
                 public void write(Json json, FloatSeq object, Class knownType){

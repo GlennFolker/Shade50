@@ -19,24 +19,25 @@ import arc.scene.ui.Dialog.*;
 import arc.scene.ui.ImageButton.*;
 import arc.scene.ui.Label.*;
 import arc.scene.ui.ScrollPane.*;
+import arc.scene.ui.Slider.*;
 import arc.scene.ui.TextButton.*;
 import arc.scene.ui.TextField.*;
 import arc.scene.ui.Tooltip.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
-import shade.Renderer.*;
 import shade.Renderer.Container.*;
 
 import java.nio.*;
 
 import static shade.Shade50.*;
+import static shade.Renderer.*;
 
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class UI implements ApplicationListener{
     public static TextureRegionDrawable
         bgWhite, bgLight, bgMid, bgDark,
-        icoPlus, icoMinus, icoReplay, icoPencil, icoBuffer, icoBufferPencil,
+        icoPlus, icoMinus, icoReplay, icoPencil, icoBuffer, icoBufferPencil, icoBlend,
         icoUp, icoDown;
 
     public static Font font, fontLarge;
@@ -46,6 +47,7 @@ public class UI implements ApplicationListener{
     public static TextButtonStyle defTextBtn;
     public static LabelStyle defLabel, largeLabel;
     public static TextFieldStyle defField;
+    public static SliderStyle defSlide;
     public static DialogStyle defDialog;
 
     protected WidgetGroup group;
@@ -70,6 +72,7 @@ public class UI implements ApplicationListener{
         icoPencil = new TextureRegionDrawable(Core.atlas.find("pencil"));
         icoBuffer = new TextureRegionDrawable(Core.atlas.find("buffer"));
         icoBufferPencil = new TextureRegionDrawable(Core.atlas.find("buffer-pencil"));
+        icoBlend = new TextureRegionDrawable(Core.atlas.find("blend"));
         icoUp = new TextureRegionDrawable(Core.atlas.find("up"));
         icoDown = new TextureRegionDrawable(Core.atlas.find("down"));
 
@@ -110,6 +113,21 @@ public class UI implements ApplicationListener{
             fontColor = Color.lightGray;
             focusedFontColor = Color.white;
             disabledFontColor = Color.darkGray;
+        }});
+
+        Core.scene.addStyle(SliderStyle.class, defSlide = new SliderStyle(){{
+            background = bgMid;
+            knob = new TextureRegionDrawable(bgLight){
+                @Override
+                public float getMinWidth(){
+                    return 8f;
+                }
+
+                @Override
+                public float getMinHeight(){
+                    return 14f;
+                }
+            };
         }});
 
         Core.scene.addStyle(DialogStyle.class, defDialog = new DialogStyle(){{
@@ -171,7 +189,11 @@ public class UI implements ApplicationListener{
                     ui.add(new CBlit());
                     hideSubmenu();
                 }).size(32f).pad(4f).tooltip("Framebuffer Blit");
-                setSize(40f, 120f);
+                row().button(icoBlend, () -> {
+                    ui.add(new CBlend());
+                    hideSubmenu();
+                }).size(32f).pad(4f).tooltip("Blending");
+                setSize(40f, 160f);
 
                 visible = false;
                 setScale(1f, 0f);
@@ -221,6 +243,7 @@ public class UI implements ApplicationListener{
         renderer.containers.clear();
         instructions.clear();
 
+        add(new CBlend(BlendFunc.srcAlpha, BlendFunc.one));
         add(new CRender(
             new Mat3D(Tmp.v31.setZero(), new Quat(), Tmp.v32.set(4f, 4f, 4f)),
             new Mesh(false, true, 8, 36, VertexAttribute.position3, VertexAttribute.color){{
@@ -246,10 +269,10 @@ public class UI implements ApplicationListener{
                 });
             }},
             new Shader("""
-                attribute vec3 a_position;
-                attribute vec4 a_color;
+                in vec3 a_position;
+                in vec4 a_color;
                 
-                varying vec4 v_color;
+                out vec4 v_color;
                 
                 uniform mat4 u_proj;
                 uniform mat4 u_trans;
@@ -261,7 +284,7 @@ public class UI implements ApplicationListener{
                     v_color.a *= 255.0 / 254.0;
                 }
                 """, """
-                varying vec4 v_color;
+                in vec4 v_color;
                 
                 void main(){
                     gl_FragColor = v_color;
@@ -283,6 +306,44 @@ public class UI implements ApplicationListener{
         renderer.containers.add(cont);
     }
 
+    public void moveUp(Container cont, Table t){
+        Seq<Cell> cells = instructions.getCells();
+        Cell<Table> cell = instructions.getCell(t);
+
+        int c = cells.indexOf(cell);
+        if(c > 0){
+            cells.remove(c);
+            cells.insert(c - 1, cell);
+            instructions.invalidateHierarchy();
+        }
+
+        Seq<Container> conts = renderer.containers;
+        int i = conts.indexOf(cont);
+        if(i > 0){
+            conts.remove(i);
+            conts.insert(i - 1, cont);
+        }
+    }
+
+    public void moveDown(Container cont, Table t){
+        Seq<Cell> cells = instructions.getCells();
+        Cell<Table> cell = instructions.getCell(t);
+
+        int c = cells.indexOf(cell);
+        if(c < cells.size - 1){
+            cells.remove(c);
+            cells.insert(c + 1, cell);
+            instructions.invalidateHierarchy();
+        }
+
+        Seq<Container> conts = renderer.containers;
+        int i = conts.indexOf(cont);
+        if(i < conts.size - 1){
+            conts.remove(i);
+            conts.insert(i + 1, cont);
+        }
+    }
+
     public void remove(Container cont, Table t){
         Cell<Table> cell = instructions.getCell(t);
         if(cell != null){
@@ -299,6 +360,25 @@ public class UI implements ApplicationListener{
     public void update(){
         Core.scene.act();
         Core.scene.draw();
+    }
+
+    public static Cell<Slider> defSlide(Table table, String tooltip, float min, float max, float step, float initial, Floatc setter){
+        return table.add((Slider)new Slider(min, max, step, false){
+            {
+                setValue(initial);
+                moved(setter);
+            }
+
+            @Override
+            public float getPrefWidth(){
+                return 40f;
+            }
+
+            @Override
+            public float getPrefHeight(){
+                return 14f;
+            }
+        }).tooltip(tooltip);
     }
 
     public static Cell<TextField> defString(Table table, String tooltip, String initial, Cons<String> setter){
@@ -324,25 +404,24 @@ public class UI implements ApplicationListener{
         return defString(table, tooltip, Integer.toString(initial), str -> setter.get(parseInt(str))).with(t -> t.setFilter(TextFieldFilter.digitsOnly));
     }
 
-    public static Cell<ImageButton> defEditor(Table table, String tooltip, String initial, Boolf2<String, Table> setter){
-        class State{
-            String content;
-        } State state = new State();
-
+    public static Cell<ImageButton> defEditor(Table table, String tooltip, Prov<String> initial, Boolf2<String, Table> setter){
         return table.button(icoPencil, () -> {
             Dialog dialog = new Dialog("Edit");
             dialog.fillParent = true;
-            dialog.cont.area(initial, str -> state.content = str).grow();
+
+            TextArea area = dialog.cont.area(initial.get(), str -> {}).grow().get();
+            area.getStyle().background = bgMid;
+
             dialog.buttons.button("OK", () -> {
                 Dialog err = new Dialog("Error");
 
-                if(!setter.get(state.content, err.cont)){
-                    err.buttons.button("OK", err::hide).width(96f).growY().get().getStyle().up = bgMid;
+                if(!setter.get(area.getText(), err.cont)){
+                    err.buttons.button("OK", err::hide).size(128f, 48f).pad(0f).get().getStyle().up = bgLight;
                     err.show();
                 }else{
                     dialog.hide();
                 }
-            }).width(96f).growY().get().getStyle().up = bgMid;
+            }).size(128f, 48f).pad(0f).padBottom(3f).get().getStyle().up = bgLight;
             dialog.show();
         }).tooltip(tooltip);
     }
@@ -519,6 +598,24 @@ public class UI implements ApplicationListener{
         });
     }
 
+    public static Cell<Table> defVec2(Table table, String title, Vec2 pointer, Runnable changed){
+        return table.table(bgDark, cont -> {
+            if(title != null && !title.isEmpty()) cont.add(title).growX().fillY().pad(4f).row();
+
+            cont.table(t -> {
+                defFloat(t, "X", pointer.x, val -> {
+                    pointer.x = val;
+                    if(changed != null) changed.run();
+                }).growX().fillY().pad(4f).padLeft(8f);
+
+                defFloat(t, "Y", pointer.y, val -> {
+                    pointer.y = val;
+                    if(changed != null) changed.run();
+                }).growX().fillY().pad(4f).padLeft(0f);
+            }).growX().fillY();
+        });
+    }
+
     public static Cell<Table> defVec3(Table table, String title, Vec3 pointer, Runnable changed){
         return table.table(bgDark, cont -> {
             if(title != null && !title.isEmpty()) cont.add(title).growX().fillY().pad(4f).row();
@@ -538,6 +635,38 @@ public class UI implements ApplicationListener{
                     pointer.z = val;
                     if(changed != null) changed.run();
                 }).growX().fillY().pad(4f).padLeft(0f);
+            }).growX().fillY();
+        });
+    }
+
+    public static Cell<Table> defCol(Table table, String title, Color pointer, Runnable changed){
+        return table.table(bgDark, cont -> {
+            if(title != null && !title.isEmpty()) cont.add(title).growX().fillY().pad(4f).row();
+
+            cont.table(t -> {
+                t.image(bgWhite).update(i -> i.setColor(pointer)).width(16f).growY().pad(4f).padLeft(8f);
+
+                t.table(col -> {
+                    defSlide(col, "Red", 0f, 1f, 1f / 256f, pointer.r, val -> {
+                        pointer.r = val;
+                        if(changed != null) changed.run();
+                    }).growX().fillY().pad(4f).padLeft(0f);
+
+                    defSlide(col, "Green", 0f, 1f, 1f / 256f, pointer.g, val -> {
+                        pointer.g = val;
+                        if(changed != null) changed.run();
+                    }).growX().fillY().pad(4f).padLeft(0f);
+
+                    defSlide(col.row(), "Blue", 0f, 1f, 1f / 256f, pointer.b, val -> {
+                        pointer.b = val;
+                        if(changed != null) changed.run();
+                    }).growX().fillY().pad(4f).padLeft(0f);
+
+                    defSlide(col, "Alpha", 0f, 1f, 1f / 256f, pointer.a, val -> {
+                        pointer.a = val;
+                        if(changed != null) changed.run();
+                    }).growX().fillY().pad(4f).padLeft(0f);
+                }).growX().fillY();
             }).growX().fillY();
         });
     }
@@ -579,8 +708,13 @@ public class UI implements ApplicationListener{
             if(title != null && !title.isEmpty()) cont.add(title).growX().fillY().pad(4f).row();
 
             Vec3 pos = new Vec3();
+            pointer.getTranslation(pos);
+
             Quat rot = new Quat();
-            Vec3 scl = new Vec3(1f, 1f, 1f);
+            pointer.getRotation(rot);
+
+            Vec3 scl = new Vec3();
+            pointer.getScale(scl);
 
             defVec3(cont, "Position", pos, () -> {
                 pointer.set(pos, rot, scl);
@@ -653,7 +787,7 @@ public class UI implements ApplicationListener{
                 buf.get(indices.items, 0, indices.size);
             }
 
-            defSeq(cont, "Vertex Attributes", attributes, null, (val, t, index) -> defVertAttrib(t, null, null, v -> attributes.set(index.get(), v))).growX().fillY().pad(4f);
+            defSeq(cont, "Vertex Attributes", attributes, null, (val, t, index) -> defVertAttrib(t, null, val, v -> attributes.set(index.get(), v))).growX().fillY().pad(4f);
             defFloats(cont.row(), "Vertices", vertices, null).growX().fillY().pad(4f).padLeft(8f);
             defShorts(cont.row(), "Indices", indices, null).growX().fillY().pad(4f).padLeft(8f);
 
@@ -663,14 +797,14 @@ public class UI implements ApplicationListener{
                 mesh.setIndices(indices.items, 0, indices.size);
 
                 setter.get(mesh);
-            }).size(32f).pad(4f).tooltip("Create")).growX().fillY().padTop(4f);
+            }).size(32f).pad(4f).tooltip("Build Mesh")).growX().fillY().padTop(4f);
         });
     }
 
     public static Cell<Table> defShader(Table table, String title, Shader initial, Cons<Shader> setter){
         class State{
-            String vertSource = initial == null ? "" : initial.getVertexShaderSource();
-            String fragSource = initial == null ? "" : initial.getFragmentShaderSource();
+            String vertSource = initial == null ? "" : copySource(initial.getVertexShaderSource());
+            String fragSource = initial == null ? "" : copySource(initial.getFragmentShaderSource());
         } State state = new State();
 
         return table.table(bgDark, cont -> {
@@ -679,24 +813,30 @@ public class UI implements ApplicationListener{
             cont.table(bgDark, t -> {
                 t.left().add("Vertex").fill().pad(4f).padLeft(8f).padRight(0f);
                 t.add(": ").fill().pad(4f).padLeft(3f);
-                defEditor(t, "Edit Shader", state.vertSource, (val, e) -> {
+                defEditor(t, "Edit Shader", () -> state.vertSource, (val, e) -> {
                     state.vertSource = val;
                     return true;
                 }).size(32f).pad(4f);
 
                 t.row().add("Fragment").fill().pad(4f).padLeft(8f).padRight(0f);
                 t.add(": ").fill().pad(4f).padLeft(3f);
-                defEditor(t, "Edit Shader", state.fragSource, (val, e) -> {
+                defEditor(t, "Edit Shader", () -> state.fragSource, (val, e) -> {
                     state.fragSource = val;
                     return true;
                 });
-            }).growX().fillY().pad(4f).padLeft(8f);
+            }).growX().fillY().pad(4f).padLeft(8f).padBottom(0f);
 
             cont.row().table(bgMid, t -> t.right().button(icoPencil, () -> {
                 Shader shader = new Shader(state.vertSource, state.fragSource);
                 setter.get(shader);
-            }).size(32f).pad(4f)).tooltip("Create").growX().fillY().padTop(4f);
+            }).size(32f).pad(4f)).tooltip("Compile Shader").growX().fillY();
         });
+    }
+
+    public static <T extends Element> Cell<T> defField(Table table, String fieldName, Prov<Cell<T>> cell){
+        table.add(fieldName).fill().pad(4f).padRight(0f);
+        table.add(": ").fill().pad(4f).padLeft(3f);
+        return cell.get().growX().fillY().pad(4f).padLeft(0f);
     }
 
     public static Cell<Table> defHeader(Table table, String title){
@@ -704,10 +844,22 @@ public class UI implements ApplicationListener{
     }
 
     public static Cell<Table> defFooter(Table table, Container cont, Runnable changed){
-        return table.table(bgMid, t -> t.right().button(icoMinus, () -> {
-            ui.remove(cont, table);
-            if(changed != null) changed.run();
-        }).size(32f).pad(4f).tooltip("Remove"));
+        return table.table(bgMid, t -> {
+            t.right().button(icoUp, () -> {
+                ui.moveUp(cont, table);
+                if(changed != null) changed.run();
+            }).size(32f).pad(4f).tooltip("Move Up");
+
+            t.button(icoDown, () -> {
+                ui.moveDown(cont, table);
+                if(changed != null) changed.run();
+            }).size(32f).pad(4f).tooltip("Move Down");
+
+            t.button(icoMinus, () -> {
+                ui.remove(cont, table);
+                if(changed != null) changed.run();
+            }).size(32f).pad(4f).tooltip("Remove");
+        });
     }
 
     public static class StatedDrawable implements TransformDrawable{
